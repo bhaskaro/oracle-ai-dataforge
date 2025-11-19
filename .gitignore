@@ -1,0 +1,102 @@
+# ==========================
+# General
+# ==========================
+*.log
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+Thumbs.db
+
+# Oracle database data files - do NOT commit
+oradata/
+
+
+# ==========================
+# Python (AI generators)
+# ==========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.env
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ==========================
+# SQL outputs
+# ==========================
+sql_output/
+*.out
+
+# ==========================
+# Shell script outputs
+# ==========================
+*.sh~
+scripts/*.log
+
+# ==========================
+# Jenkins
+# ==========================
+# Do NOT ignore Jenkinsfile or pipelines folder
+# Ignore Jenkins runtime workspace
+jenkins_home/
+workspace/
+builds/
+jobs/*/workspace/
+jobs/*/builds/
+
+# Jenkins casc generated temp files
+jenkins/casc/*.tmp
+
+# ==========================
+# Docker
+# ==========================
+docker-data/
+docker-volumes/
+*.pid
+
+# Docker-compose override files
+docker-compose.override.yml
+
+# ==========================
+# Credentials (DO NOT CHECK IN)
+# ==========================
+*.key
+*.pem
+*.crt
+*.creds
+.env.local
+secrets/
+oracle_wallet/
+
+# ==========================
+# Node / Web UI (future-proof)
+# ==========================
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+*.iml
+
+# ==========================
+# OS-level
+# ==========================
+ehthumbs.db
+Desktop.ini
+
+# ==========================
+# Temp backups
+# ==========================
+*~
+*.orig
+
