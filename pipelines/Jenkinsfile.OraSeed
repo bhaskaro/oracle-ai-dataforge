@@ -1,7 +1,15 @@
 pipeline {
     agent any
 
-    options {
+    parameters {
+        choice(
+            name: 'TARGET_ENV',
+            choices: ['dev', 'qa', 'prod'],
+            description: 'Select the environment to seed (dev / qa / prod)'
+        )
+    }
+	
+	options {
         timestamps()
     }
 
@@ -14,11 +22,36 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                sh 'echo checkout scm'
+                checkout scm
             }
         }
 
-        stage('Prepare SQL Scripts') {
+        stage('Display Environment Variables') {
+            steps {
+                sh "echo Using environment: ${params.TARGET_ENV}"
+            }
+        }
+		
+		stage('Load Env Config') {
+			steps {
+				script {
+					echo "Loading properties for env: ${params.TARGET_ENV}"
+					def props = readProperties file: "env_config/${params.TARGET_ENV}.properties"
+
+					env.ORA_HOST = props['db.host']
+					env.ORA_USER = props['db.user']
+					env.ORA_PASS = props['db.pass']
+					env.ROW_COUNT = props['row.count']
+
+					echo "DB Host: ${env.ORA_HOST}"
+					echo "User: ${env.ORA_USER}"
+					echo "Row Count: ${env.ROW_COUNT}"
+				}
+			}
+		}
+
+		
+		stage('Prepare SQL Scripts') {
             steps {
                 sh 'pwd && ls -lrth'
             }
