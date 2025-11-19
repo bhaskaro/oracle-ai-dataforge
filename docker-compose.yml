@@ -15,5 +15,5 @@ services:
       - "./oradata:/opt/oracle/oradata"
       # Optional: startup scripts directory on host → uncomment and point to your scripts
       # - ./oracle-startup-scripts:/opt/oracle/scripts/startup:ro
-      - ./sql:/opt/sql
+      - ./cases:/opt/cases
     restart: unless-stopped
