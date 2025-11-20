@@ -2,13 +2,28 @@
 set -euo pipefail
 
 # Usage:
-#   ./run_case13_local.sh load 500         # schema VOGGU, 500 rows
-#   ./run_case13_local.sh cleanup          # schema VOGGU
-#   ./run_case13_local.sh load 500 SCHEMA2 # override schema
+#   ./run_case13_local.sh load [row_count] [src_schema] [tgt_schema]
+#   ./run_case13_local.sh cleanup [src_schema] [tgt_schema]
+#
+# Defaults:
+#   row_count  = 100
+#   src_schema = VOGGU
+#   tgt_schema = same as src_schema
 
 ACTION="${1:-load}"           # load | cleanup
 P_TARGET_ROWS="${2:-100}"     # only used for 'load'
-TARGET_SCHEMA="${3:-VOGGU}"   # default schema is VOGGU
+
+# Positional schema args:
+# If ACTION=cleanup and user runs ./run_case13_local.sh cleanup VOGGU_SRC VOGGU_TGT
+# then $2 is src_schema, $3 is tgt_schema, so we shift differently below.
+if [ "${ACTION}" = "cleanup" ]; then
+  SRC_SCHEMA="${2:-VOGGU}"
+  TGT_SCHEMA="${3:-${SRC_SCHEMA}}"
+else
+  # load: ./run_case13_local.sh load 500 VOGGU_SRC VOGGU_TGT
+  SRC_SCHEMA="${3:-VOGGU}"
+  TGT_SCHEMA="${4:-${SRC_SCHEMA}}"
+fi
 
 # --- DB container + login config ---
 CONTAINER_NAME="oracle-ai-db"
@@ -16,37 +31,45 @@ DB_USER="SYSTEM"
 DB_PASS="welcome1"
 DB_SERVICE="FREEPDB1"
 
-# Path inside the container where SQLs are mounted
 SQL_DIR_CASE="/opt/cases/case13/sqls"
 SQL_DIR_COMMON="/opt/cases/common/sqls"
 
-# Password used when auto-creating schemas (change if you want)
 SCHEMA_PASSWORD="${CASE_SCHEMA_PASSWORD:-welcome1}"
 
 case "${ACTION}" in
   load)
-    echo "==> [case13] Loading TABLE_CASE13_SRC & TABLE_CASE13_TARGET"
-    echo "    Schema: ${TARGET_SCHEMA}"
-    echo "    Row target: ${P_TARGET_ROWS}"
-    echo "    (Will auto-create schema if missing)"
+    echo "==> [case13-local] Loading CASE13 tables"
+    echo "    Rows:       ${P_TARGET_ROWS}"
+    echo "    SRC schema: ${SRC_SCHEMA}"
+    echo "    TGT schema: ${TGT_SCHEMA}"
+    echo "    (Will auto-create schemas if missing; default TS = USERS)"
 
     docker exec -i "${CONTAINER_NAME}" \
       sqlplus -s "${DB_USER}/${DB_PASS}@${DB_SERVICE}" <<EOF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
 
--- 1) Ensure schema exists
-DEFINE p_username = ${TARGET_SCHEMA}
-DEFINE p_password = ${SCHEMA_PASSWORD}
+-- 1) Ensure SRC schema exists (local: USERS tablespace)
+DEFINE p_username   = ${SRC_SCHEMA}
+DEFINE p_password   = ${SCHEMA_PASSWORD}
 DEFINE p_default_ts = USERS
 @${SQL_DIR_COMMON}/create_schema_if_missing.sql
 
--- 2) Work in that schema
-ALTER SESSION SET CURRENT_SCHEMA=${TARGET_SCHEMA};
+-- 2) Ensure TGT schema exists (local: USERS tablespace)
+DEFINE p_username   = ${TGT_SCHEMA}
+DEFINE p_password   = ${SCHEMA_PASSWORD}
+DEFINE p_default_ts = USERS
+@${SQL_DIR_COMMON}/create_schema_if_missing.sql
 
--- 3) Load / top-up data
+-- 3) Load SRC table(s) in SRC schema
+ALTER SESSION SET CURRENT_SCHEMA=${SRC_SCHEMA};
 DEFINE p_target_rows = ${P_TARGET_ROWS}
 @${SQL_DIR_CASE}/table_case13_src_loader.sql
+
+-- 4) Load TARGET table(s) in TGT schema
+ALTER SESSION SET CURRENT_SCHEMA=${TGT_SCHEMA};
+DEFINE p_target_rows = ${P_TARGET_ROWS}
 @${SQL_DIR_CASE}/table_case13_target_loader.sql
 
 EXIT
@@ -54,21 +77,22 @@ EOF
     ;;
 
   cleanup)
-    echo "==> [case13] Cleanup: Dropping CASE13 tables from schema ${TARGET_SCHEMA}"
-    echo "    (Will auto-create schema only if needed for ALTER SESSION; safe anyway)"
+    echo "==> [case13-local] Cleanup CASE13 tables"
+    echo "    SRC schema: ${SRC_SCHEMA}"
+    echo "    TGT schema: ${TGT_SCHEMA}"
 
     docker exec -i "${CONTAINER_NAME}" \
       sqlplus -s "${DB_USER}/${DB_PASS}@${DB_SERVICE}" <<EOF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
 
--- Optional but harmless: ensure schema exists
-DEFINE p_username = ${TARGET_SCHEMA}
-DEFINE p_password = ${SCHEMA_PASSWORD}
-@${SQL_DIR_COMMON}/create_schema_if_missing.sql
+-- Cleanup in SRC schema
+ALTER SESSION SET CURRENT_SCHEMA=${SRC_SCHEMA};
+@${SQL_DIR_CASE}/case13_cleanup.sql
 
-ALTER SESSION SET CURRENT_SCHEMA=${TARGET_SCHEMA};
-
+-- Cleanup in TGT schema (safe: drops missing tables with ORA-942 handling)
+ALTER SESSION SET CURRENT_SCHEMA=${TGT_SCHEMA};
 @${SQL_DIR_CASE}/case13_cleanup.sql
 
 EXIT
@@ -77,8 +101,8 @@ EOF
 
   *)
     echo "Usage:"
-    echo "  ${0} load [row_count] [schema]"
-    echo "  ${0} cleanup [schema]"
+    echo "  $0 load [row_count] [src_schema] [tgt_schema]"
+    echo "  $0 cleanup [src_schema] [tgt_schema]"
     exit 1
     ;;
 esac
